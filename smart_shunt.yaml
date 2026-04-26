@@ -127,13 +127,20 @@ text_sensor:
     update_interval: 10s
     lambda: |-
       float i = id(battery_current).state;
-      if (std::abs(i) < 0.1f) {
-        return {"Мережа / Спокій"};
-      }
+      float used = id(used_ah).state;
+
+      // Якщо струму майже немає
+      if (std::abs(i) < 0.1f) return {"Очікування"};
+
       if (i > 0) {
         return {"До розряду"};
       } else {
-        return {"До повного заряду"};
+        // Якщо струм на заряд, але ми вже використали 0 Ач (тобто 100%)
+        if (used <= 0.1f) {
+          return {"Заряджено (Мережа)"};
+        } else {
+          return {"Зарядка АКБ"};
+        }
       }
 
 button:

@@ -1,0 +1,186 @@
+type: custom:button-card
+entity: sensor.invertor_zariad_batarei
+name: CONTROL SYSTEM
+show_state: true
+show_name: true
+show_icon: false
+styles:
+  card:
+    - background: "#0f172a"
+    - border-radius: 24px
+    - padding: 20px
+    - color: "#ffffff"
+  grid:
+    - grid-template-areas: "\"n p\" \"s p\" \"stats stats\" \"btns btns\""
+    - grid-template-columns: 1fr 1fr
+  name:
+    - justify-self: start
+    - font-size: 12px
+    - color: "#ffffff"
+    - letter-spacing: 1px
+  state:
+    - font-size: 44px
+    - font-weight: bold
+    - justify-self: start
+    - color: |
+        [[[
+          if (!entity || entity.state === 'unavailable' || entity.state === 'unknown') return "grey";
+          var s = parseFloat(entity.state);
+          if (s > 80) return "#22c55e";
+          if (s > 30) return "#f59e0b";
+          return "#ef4444";
+        ]]]
+custom_fields:
+  p:
+    card:
+      type: custom:button-card
+      entity: sensor.invertor_napriazhenie
+      name: POWER
+      show_state: true
+      styles:
+        card:
+          - background: none
+          - border: none
+          - box-shadow: none
+        state:
+          - font-size: 20px
+          - font-weight: bold
+          - color: "#ffffff"
+        name:
+          - font-size: 10px
+          - color: "#94a3b8"
+  stats:
+    card:
+      type: grid
+      columns: 2
+      square: false
+      cards:
+        - type: custom:button-card
+          entity: sensor.invertor_napruga
+          name: Напруга
+          show_state: true
+          show_icon: true
+          icon: mdi:flash
+          styles:
+            card:
+              - background: "#1e293b"
+              - border: none
+              - border-radius: 16px
+              - padding: 10px
+            name:
+              - font-size: 11px
+              - color: "#94a3b8"
+              - justify-self: start
+            state:
+              - font-size: 16px
+              - font-weight: bold
+              - justify-self: start
+              - color: "#ffffff"
+            img_cell:
+              - justify-self: end
+            icon:
+              - width: 20px
+              - color: "#38bdf8"
+        - type: custom:button-card
+          entity: sensor.invertor_strum
+          name: Струм
+          show_state: true
+          show_icon: true
+          icon: mdi:current-dc
+          styles:
+            card:
+              - background: "#1e293b"
+              - border: none
+              - border-radius: 16px
+              - padding: 10px
+            name:
+              - font-size: 11px
+              - color: "#94a3b8"
+              - justify-self: start
+            state:
+              - font-size: 16px
+              - font-weight: bold
+              - justify-self: start
+              - color: "#ffffff"
+            img_cell:
+              - justify-self: end
+            icon:
+              - width: 20px
+              - color: "#38bdf8"
+        - type: custom:button-card
+          entity: sensor.invertor_chas_do_zmini_stanu
+          name: |
+            [[[ 
+              var status = states['sensor.invertor_status_roboti'];
+              return (status && status.state) ? status.state : "Статус";
+            ]]]
+          show_state: true
+          show_icon: true
+          icon: mdi:timer-outline
+          styles:
+            card:
+              - background: "#1e293b"
+              - border: none
+              - border-radius: 16px
+              - padding: 10px
+            name:
+              - font-size: 11px
+              - color: "#94a3b8"
+              - justify-self: start
+            state:
+              - font-size: 16px
+              - font-weight: bold
+              - justify-self: start
+              - color: "#ffffff"
+            img_cell:
+              - justify-self: end
+            icon:
+              - width: 20px
+              - color: "#38bdf8"
+        - type: custom:button-card
+          entity: sensor.invertor_vikoristano_ach
+          name: Витрата Ah
+          show_state: true
+          show_icon: true
+          icon: mdi:battery-minus
+          styles:
+            card:
+              - background: "#1e293b"
+              - border: none
+              - border-radius: 16px
+              - padding: 10px
+            name:
+              - font-size: 11px
+              - color: "#94a3b8"
+              - justify-self: start
+            state:
+              - font-size: 16px
+              - font-weight: bold
+              - justify-self: start
+              - color: "#ffffff"
+            img_cell:
+              - justify-self: end
+            icon:
+              - width: 20px
+              - color: "#38bdf8"
+  btns:
+    card:
+      type: custom:button-card
+      entity: button.invertor_skinuti_na_100
+      name: Скинути на 100%
+      show_name: true
+      show_icon: true
+      icon: mdi:restore
+      styles:
+        card:
+          - background: "linear-gradient(90deg, #22c55e 0%, #16a34a 100%)"
+          - border-radius: 12px
+          - height: 45px
+          - margin-top: 15px
+        name:
+          - color: white
+          - font-weight: bold
+          - font-size: 12px
+        icon:
+          - color: white
+          - width: 20px
