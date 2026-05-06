@@ -8,10 +8,12 @@ esp32:
   framework:
     type: esp-idf
 
+# Піни I2C для SuperMini
 i2c:
-  sda: 8
+  sda: 8 
   scl: 9
   scan: true
+  id: bus_a
 
 logger:
 api:
@@ -27,7 +29,7 @@ globals:
   - id: battery_capacity
     type: float
     restore_value: no
-    initial_value: '200.0' # Твоя ємність АКБ
+    initial_value: '200.0'
 
 sensor:
   - platform: ina226
@@ -38,114 +40,160 @@ sensor:
 
     bus_voltage:
       id: battery_voltage
-      name: "Напруга"
+      name: "Battery Voltage"
+      unit_of_measurement: "V"
+      accuracy_decimals: 2
       filters:
         - calibrate_linear:
-            # КАЛІБРУВАННЯ НАПРУГИ (підстав свої заміри мультиметром)
-            - 24.0 -> 24.2
-            - 28.0 -> 28.3
-            
+            - 27.0 -> 27.0
+            - 24.0 -> 24.0
+
     current:
       id: battery_current
-      name: "Струм"
+      name: "Battery Current"
+      unit_of_measurement: "A"
+      accuracy_decimals: 2
       filters:
-        - multiply: -1.0
-        # КАЛІБРУВАННЯ СТРУМУ (підтягуємо показники до PowMr)
         - calibrate_linear:
-            - 0.0 -> 0.0
-            - 12.0 -> 17.0
-        # Фільтр від різких стрибків (ковзне середнє за 5 замірів)
+            - 10.0 -> 16.6  
+            - 20.0 -> 33.2
+            - 36.0 -> 59.76
+        - multiply: -1.0
         - sliding_window_moving_average:
-            window_size: 5
+            window_size: 10
             send_every: 1
-        # Мертва зона: якщо струм менше 0.6А, вважаємо це спокоєм
-        - lambda: "return (std::abs(x) < 0.6) ? 0.0 : x;"
 
-  # Лічильник використаних Ач з захистом від "мінуса"
-  - platform: integration
-    id: used_ah
-    name: "Використано Ач"
-    sensor: battery_current
-    time_unit: h
-    accuracy_decimals: 3
-    restore: true 
-    integration_method: trapezoid
-    filters:
-      # Якщо значення стає менше 0 (перезаряд), скидаємо в 0
-      - lambda: "return (x < 0) ? 0 : x;"
-
+  # --- ДВОСТОРОННІЙ ПРОГРАМНИЙ ШЛЮЗ (Deadband) ---
+  # Пропускає розряд (> 0.3A) ТА заряд (< -0.3A).
+  # Відсікає лише мікро-шуми від -0.3A до 0.3A (режим Float).
   - platform: template
-    id: battery_soc
-    name: "Заряд батареї"
-    unit_of_measurement: "%"
-    device_class: battery
-    update_interval: 10s
+    id: filtered_battery_current
+    name: "Filtered Battery Current"
+    internal: true
+    unit_of_measurement: "A"
     lambda: |-
-      if (!id(used_ah).has_state()) return NAN;
-      float soc = ((id(battery_capacity) - id(used_ah).state) / id(battery_capacity)) * 100.0f;
-      
-      // Автоматичне вирівнювання: якщо інвертор "набив" АКБ понад 100%, 
-      // скидаємо лічильник витрат, фіксуючи нову точку відліку
-      if (soc > 100.0f) {
-        id(used_ah).publish_state(0.0);
-        return 100.0f;
-      }
-      return std::clamp(soc, 0.0f, 100.0f);
-
-  - platform: template
-    id: battery_time_remaining
-    name: "Час до зміни стану"
-    unit_of_measurement: "год"
-    update_interval: 10s
-    lambda: |-
-      float i = id(battery_current).state;
-      float capacity = id(battery_capacity);
-      float used = id(used_ah).state;
-      if (std::abs(i) < 0.1f) return NAN; 
-      if (i > 0) {
-        return (capacity - used) / i;
+      float current = id(battery_current).state;
+      if (current > 0.3 || current < -0.3) {
+        return current;
       } else {
-        return used / std::abs(i);
+        return 0.0;
       }
+    update_interval: 1s
 
   - platform: template
-    name: "Потужність"
+    name: "Battery Power"
     id: battery_power
     unit_of_measurement: "W"
     device_class: power
     state_class: measurement
     accuracy_decimals: 1
+    lambda: return id(battery_voltage).state * id(battery_current).state;
     update_interval: 1s
-    lambda: |-
-      return id(battery_voltage).state * id(battery_current).state;
 
-text_sensor:
+  # Лічильник витрати (Ah) - тепер рахує і в плюс, і в мінус
+  - platform: integration
+    id: used_ah
+    name: "Used Ah"
+    # Беремо дані з нового двостороннього шлюзу
+    sensor: filtered_battery_current
+    time_unit: h
+    restore: true
+    integration_method: trapezoid
+    on_value:
+      # АПАРАТНИЙ ЗАПОБІЖНИК:
+      # Якщо під час зарядки витрата впала нижче 0.0 Ah, жорстко фіксуємо її на нулі.
+      then:
+        - if:
+            condition:
+              lambda: 'return x < 0.0;'
+            then:
+              - sensor.integration.reset: used_ah
+
+  # Рівень заряду (SOC)
   - platform: template
-    name: "Статус роботи"
-    id: status_roboti
-    icon: "mdi:clock-check"
-    update_interval: 10s
+    name: "Battery SOC"
+    id: battery_soc
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    device_class: battery
     lambda: |-
-      float i = id(battery_current).state;
+      float capacity = id(battery_capacity); 
       float used = id(used_ah).state;
+      if (capacity <= 0.0) return 0.0; 
+      
+      float soc = ((capacity - used) / capacity) * 100.0;
+      if (soc > 100.0) return 100.0;
+      if (soc < 0.0) return 0.0;
+      return soc;
+    update_interval: 5s
 
-      // Якщо струму майже немає
-      if (std::abs(i) < 0.1f) return {"Очікування"};
-
-      if (i > 0) {
-        return {"До розряду"};
-      } else {
-        // Якщо струм на заряд, але ми вже використали 0 Ач (тобто 100%)
-        if (used <= 0.1f) {
-          return {"Заряджено (Мережа)"};
-        } else {
-          return {"Зарядка АКБ"};
-        }
-      }
+# Надійна автоматична синхронізація 100%
+interval:
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(battery_voltage).state >= 28.3 && id(battery_current).state < 0.0;'
+          then:
+            # Правильний синтаксис апаратного очищення масиву
+            - sensor.integration.reset: used_ah
 
 button:
   - platform: template
-    name: "Скинути на 100%"
-    icon: "mdi:battery-check"
+    name: "Reset to 100%"
     on_press:
-      - sensor.integration.reset: used_ah
+      then:
+        # Правильний синтаксис очищення пам'яті по кнопці
+        - sensor.integration.reset: used_ah
+
+# --- ТЕКСТОВІ СЕНСОРИ (Прогнозування часу) ---
+text_sensor:
+  - platform: template
+    name: "Time Remaining"
+    id: time_remaining
+    icon: "mdi:clock-outline"
+    update_interval: 10s
+    lambda: |-
+      float current = id(battery_current).state;
+      float capacity = id(battery_capacity);
+      float used = id(used_ah).state;
+
+      // Захист від NaN (коли сенсори ще не прокинулися після перезавантаження)
+      if (isnan(current) || isnan(used)) return std::string("Обчислення...");
+
+      float remaining_ah = capacity - used;
+      if (remaining_ah < 0.0) remaining_ah = 0.0;
+      if (used < 0.0) used = 0.0;
+
+      char buffer[64];
+
+      // 1. СЦЕНАРІЙ РОЗРЯДУ (Струм більше 0.5A)
+      if (current > 0.5) {
+        float hours = remaining_ah / current;
+        int h = (int)hours;
+        int m = (int)((hours - h) * 60);
+        
+        // Якщо залишилося більше 100 годин (дуже мале навантаження)
+        if (h > 100) return std::string("> 100 годин");
+        
+        snprintf(buffer, sizeof(buffer), "%dг %02dхв (Залишилось)", h, m);
+        return std::string(buffer);
+      } 
+      // 2. СЦЕНАРІЙ ЗАРЯДУ (Струм менше -0.5A)
+      else if (current < -0.5) {
+        float charge_current = -current; // Робимо струм позитивним для математики
+        float hours = used / charge_current; // Рахуємо час до повного відшкодування витрати
+        int h = (int)hours;
+        int m = (int)((hours - h) * 60);
+        
+        // Якщо батарея майже повна
+        if (used <= 0.5) return std::string("Заряджено");
+        
+        snprintf(buffer, sizeof(buffer), "%dг %02dхв (До повного)", h, m);
+        return std::string(buffer);
+      } 
+      // 3. СЦЕНАРІЙ ПРОСТОЮ / FLOAT (Струм у межах мертвої зони)
+      else {
+        if (used <= 0.5) return std::string("100% / Float");
+        return std::string("Очікування");
+      }

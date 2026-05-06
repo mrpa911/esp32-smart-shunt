@@ -1,5 +1,5 @@
 type: custom:button-card
-entity: sensor.invertor_zariad_batarei
+entity: sensor.invertor_battery_soc
 name: CONTROL SYSTEM
 show_state: true
 show_name: true
@@ -34,7 +34,7 @@ custom_fields:
   p:
     card:
       type: custom:button-card
-      entity: sensor.invertor_napriazhenie
+      entity: sensor.invertor_battery_power
       name: POWER
       show_state: true
       styles:
@@ -56,7 +56,7 @@ custom_fields:
       square: false
       cards:
         - type: custom:button-card
-          entity: sensor.invertor_napruga
+          entity: sensor.invertor_battery_voltage
           name: Напруга
           show_state: true
           show_icon: true
@@ -82,7 +82,7 @@ custom_fields:
               - width: 20px
               - color: "#38bdf8"
         - type: custom:button-card
-          entity: sensor.invertor_strum
+          entity: sensor.invertor_battery_current
           name: Струм
           show_state: true
           show_icon: true
@@ -108,12 +108,8 @@ custom_fields:
               - width: 20px
               - color: "#38bdf8"
         - type: custom:button-card
-          entity: sensor.invertor_chas_do_zmini_stanu
-          name: |
-            [[[ 
-              var status = states['sensor.invertor_status_roboti'];
-              return (status && status.state) ? status.state : "Статус";
-            ]]]
+          entity: sensor.invertor_time_remaining
+          name: Час / Статус
           show_state: true
           show_icon: true
           icon: mdi:timer-outline
@@ -128,7 +124,7 @@ custom_fields:
               - color: "#94a3b8"
               - justify-self: start
             state:
-              - font-size: 16px
+              - font-size: 13px
               - font-weight: bold
               - justify-self: start
               - color: "#ffffff"
@@ -138,7 +134,7 @@ custom_fields:
               - width: 20px
               - color: "#38bdf8"
         - type: custom:button-card
-          entity: sensor.invertor_vikoristano_ach
+          entity: sensor.invertor_used_ah
           name: Витрата Ah
           show_state: true
           show_icon: true
@@ -166,7 +162,7 @@ custom_fields:
   btns:
     card:
       type: custom:button-card
-      entity: button.invertor_skinuti_na_100
+      entity: button.invertor_reset_to_100
       name: Скинути на 100%
       show_name: true
       show_icon: true
